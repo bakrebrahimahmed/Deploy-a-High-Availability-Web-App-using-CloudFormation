@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Bakr Ebrahim Ahmed / Udacity - Project 2
+Parameters:
+
+    ProjectName:
+        Description: Project Name
+        Type: String
+
+    VPCCIDR: 
+        Description: My VPC
+        Type: String
+        Default: 10.0.0.0/16
+    PublicSub1CIDR:
+        Description: First public subnet in the first Availability Zone
+        Type: String
+        Default: 10.0.1.0/24
+
+    PublicSub2CIDR:
+        Description: Second public subnet in the second Availability Zone
+        Type: String
+        Default: 10.0.2.0/24
+
+    PrivateSub1CIDR:
+        Description: First Private subnet in the first Availability Zone
+        Type: String
+        Default: 10.0.3.0/24
+
+    PrivateSub2CIDR:
+        Description: Second public subnet in the second Availability Zone
+        Type: String
+        Default: 10.0.4.0/24
+  
+    
+Resources:
+    MyVPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: !Ref VPCCIDR
+        EnableDnsHostnames: true
+        Tags:
+          - Key: name
+            Value: !Ref ProjectName
+    InternetGateway:
+        Type: AWS::EC2::InternetGateway
+        Properties:
+            Tags:
+                - Key: Name
+                  Value: !Ref ProjectName      
+    InternetGatewayAttachment:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+            InternetGatewayId: !Ref InternetGateway
+            VpcId: !Ref MyVPC
+    PublicSub1: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref MyVPC
+            AvailabilityZone: !Select [ 0, !GetAZs '' ]
+            CidrBlock: !Ref PublicSub1CIDR
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${ProjectName} Public Subnet First AZ
+
+    PublicSub2: 
+        Type: AWS::EC2::Subnet
+        Properties: 
+            VpcId: !Ref MyVPC
+            AvailabilityZone: !Select [ 1, !GetAZs '' ]
+            CidrBlock: !Ref PublicSub2CIDR
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${ProjectName} Public Subnet Second AZ
+
+    PrivateSub1: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref MyVPC
+            AvailabilityZone: !Select [ 0, !GetAZs '' ]
+            CidrBlock: !Ref PrivateSub1CIDR
+            MapPublicIpOnLaunch: false
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${ProjectName} Private Subnet First AZ
+
+    PrivateSub2: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref MyVPC
+            AvailabilityZone: !Select [ 1, !GetAZs '' ]
+            CidrBlock: !Ref PrivateSub2CIDR
+            MapPublicIpOnLaunch: false
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${ProjectName} Private Subnet Second AZ
+    Nat1EIP:
+        Type: AWS::EC2::EIP
+        DependsOn: InternetGatewayAttachment
+        Properties: 
+            Domain: vpc
+
+    Nat2EIP:
+        Type: AWS::EC2::EIP
+        DependsOn: InternetGatewayAttachment
+        Properties:
+            Domain: vpc
+
+    Nat1: 
+        Type: AWS::EC2::NatGateway
+        Properties: 
+            AllocationId: !GetAtt Nat1EIP.AllocationId
+            SubnetId: !Ref PublicSub1
+
+    Nat2: 
+        Type: AWS::EC2::NatGateway
+        Properties:
+            AllocationId: !GetAtt Nat2EIP.AllocationId
+            SubnetId: !Ref PublicSub2
+
+    PublicRoutingTable:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref MyVPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${ProjectName} Public Routing table
+
+    DefaultPublicRouting: 
+        Type: AWS::EC2::Route
+        DependsOn: InternetGatewayAttachment
+        Properties: 
+            RouteTableId: !Ref PublicRoutingTable
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref InternetGateway
+
+    PublicSub1RoutingTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRoutingTable
+            SubnetId: !Ref PublicSub1
+
+    PublicSub2RoutingTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRoutingTable
+            SubnetId: !Ref PublicSub2
+    
+
+    PrivateRoutingTable1:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref MyVPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${ProjectName} Private Routes First AZ
+
+    DefaultPrivateRouting1:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRoutingTable1
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId: !Ref Nat1
+
+    PrivateSub1RoutingTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRoutingTable1
+            SubnetId: !Ref PrivateSub1
+
+    PrivateRouteTable2:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref MyVPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${ProjectName} Private Routes Second AZ
+
+    DefaultPrivateRouting2:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId: !Ref Nat2
+
+    PrivateSub2RoutingTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            SubnetId: !Ref PrivateSub2
+Outputs: 
+
+    VPC: 
+        Description: A reference to the created VPC
+        Value: !Ref MyVPC
+        Export:
+          Name: !Sub ${ProjectName}-VPCID
+
+    VPCPublicRoutingTable:
+        Description: Public Routing
+        Value: !Ref PublicRoutingTable
+        Export:
+          Name: !Sub ${ProjectName}-PUB-RT
+
+    VPCPrivateRoutingTable1:
+        Description: Private Routing AZ1
+        Value: !Ref PrivateRoutingTable1
+        Export:
+          Name: !Sub ${ProjectName}-PRI1-RT
+
+    VPCPrivateRouteTable2:
+        Description: Private Routing AZ2
+        Value: !Ref PrivateRouteTable2
+        Export:
+          Name: !Sub ${ProjectName}-PRI2-RT
+
+    PublicSubnets:
+        Description: A list of the public subnets
+        Value: !Join [ ",", [ !Ref PublicSub1, !Ref PublicSub2 ]]
+        Export:
+          Name: !Sub ${ProjectName}-PUB-SUBs
+
+    PrivateSubnets:
+        Description: A list of the private subnets
+        Value: !Join [ ",", [ !Ref PrivateSub1, !Ref PrivateSub2 ]]
+        Export:
+          Name: !Sub ${ProjectName}-PRIV-SUBs
+
+    PublicSub1:
+        Description: A reference to the public subnet in the 1st Availability Zone
+        Value: !Ref PublicSub1
+        Export:
+          Name: !Sub ${ProjectName}-PUB1-SUB
+
+    PublicSub2: 
+        Description: A reference to the public subnet in the 2nd Availability Zone
+        Value: !Ref PublicSub2
+        Export:
+          Name: !Sub ${ProjectName}-PUB2-SUB
+
+    PrivateSub1:
+        Description: A reference to the private subnet in the 1st Availability Zone
+        Value: !Ref PrivateSub1
+        Export:
+          Name: !Sub ${ProjectName}-PRI1-SUB
+
+    PrivateSub2: 
+        Description: A reference to the private subnet in the 2nd Availability Zone
+        Value: !Ref PrivateSub2
+        Export:
+          Name: !Sub ${ProjectName}-PRI2-SUB
+
